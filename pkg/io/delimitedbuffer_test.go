@@ -28,3 +28,23 @@ func TestShouldWriteMultipleDelimitedBinaries(t *testing.T) {
 		t.Error("did not match b2")
 	}
 }
+
+func TestShouldReturnNoBytesAtEndOfChunk(t *testing.T) {
+	b1 := []byte("foo")
+	b2 := []byte("2😗↗️₯℃×≸∛23rahhh soooooo😍")
+	dbuf := DelimitedBuffer{}
+
+	dbuf.Write(b1)
+	dbuf.Write(b2)
+	p := make([]byte, 20)
+
+	n, _ := dbuf.Read(p)
+	if string(p[:n]) != "foo" {
+		t.Error("read data did not match expected")
+	}
+
+	n, _ = dbuf.Read(p)
+	if n != 0 {
+		t.Error("read data should have returned 0 bytes at end of chunk")
+	}
+}
