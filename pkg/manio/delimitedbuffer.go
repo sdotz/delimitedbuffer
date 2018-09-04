@@ -1,4 +1,4 @@
-package io
+package manio
 
 import (
 	"encoding/binary"
@@ -11,7 +11,7 @@ import (
 type DelimitedBuffer struct {
 	bytes.Buffer
 	remainingChunkBytes uint32
-	hasBeenRead bool
+	hasBeenRead         bool
 }
 
 // Write takes a byte slice and writes it to the DelimitedBuffer
@@ -35,17 +35,43 @@ func (f *DelimitedBuffer) Write(data []byte) (int, error) {
 
 //ReadNext reads the next byte slice from the buffer and returns it
 func (f *DelimitedBuffer) ReadNext() ([]byte, error) {
-	b := make([]byte, 4)
-	if _, err := f.Buffer.Read(b); err != nil {
+	bSize, err := f.getNextChunkSize()
+	if err != nil {
 		return []byte{}, err
 	}
-
-	data := make([]byte, binary.LittleEndian.Uint32(b))
+	data := make([]byte, bSize)
 	if _, err := f.Buffer.Read(data); err != nil {
 		return []byte{}, err
 	}
 
 	return data, nil
+}
+
+func (f *DelimitedBuffer) getNextChunkSize() (uint32, error) {
+	if f.remainingChunkBytes > 0 {
+		return 0, errors.New("cannot get next chunk size since previous chunk has not been completely read")
+	}
+	b := make([]byte, 4)
+	if _, err := f.Buffer.Read(b); err != nil {
+		return 0, err
+	}
+	return binary.LittleEndian.Uint32(b), nil
+}
+
+func (f *DelimitedBuffer) ReadByte() (byte, error) {
+	if f.remainingChunkBytes == 0 {
+		chunkSize, err := f.getNextChunkSize()
+		if err != nil {
+			return 0, err
+		}
+		f.remainingChunkBytes = chunkSize
+	}
+	b, err := f.Buffer.ReadByte()
+	if err != nil {
+		return 0, err
+	}
+	f.remainingChunkBytes = f.remainingChunkBytes - 1
+	return b, nil
 }
 
 // Read reads up to the end of the next chunk

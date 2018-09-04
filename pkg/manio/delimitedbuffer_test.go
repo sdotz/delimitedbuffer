@@ -1,8 +1,10 @@
-package io
+package manio
 
 import (
 	"testing"
 	"bytes"
+	"compress/gzip"
+	"io"
 )
 
 func TestShouldWriteMultipleDelimitedBinaries(t *testing.T) {
@@ -46,5 +48,35 @@ func TestShouldReturnNoBytesAtEndOfChunk(t *testing.T) {
 	n, _ = dbuf.Read(p)
 	if n != 0 {
 		t.Error("read data should have returned 0 bytes at end of chunk")
+	}
+}
+
+func TestReadWritePassthrough(t *testing.T){
+	b2 := []byte("2😗↗️₯℃×≸∛23rahhh soooooo😍")
+
+	dbuf := DelimitedBuffer{}
+
+	zw := gzip.NewWriter(&dbuf)
+
+	zw.Write(b2)
+
+	if err := zw.Close(); err != nil {
+		panic(err)
+	}
+
+	zr, _:= gzip.NewReader(&dbuf)
+
+	outbuf := bytes.NewBuffer([]byte{})
+
+	if _, err := io.Copy(outbuf, zr); err != nil {
+		panic(err)
+	}
+
+	if err := zr.Close(); err != nil {
+		panic(err)
+	}
+
+	if  !bytes.Equal(outbuf.Bytes(), b2) {
+		t.Error("output bytes did not match expected output")
 	}
 }
