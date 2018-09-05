@@ -1,4 +1,4 @@
-package manio
+package main
 
 import (
 	"testing"
