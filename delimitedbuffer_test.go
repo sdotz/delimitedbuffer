@@ -1,4 +1,4 @@
-package main
+package delimitedbuffer
 
 import (
 	"testing"
@@ -35,7 +35,6 @@ func TestShouldReturnNoBytesAtEndOfChunk(t *testing.T) {
 	b1 := []byte("foo")
 	b2 := []byte("2😗↗️₯℃×≸∛23rahhh soooooo😍")
 	dbuf := DelimitedBuffer{}
-
 	dbuf.Write(b1)
 	dbuf.Write(b2)
 	p := make([]byte, 20)
@@ -51,32 +50,45 @@ func TestShouldReturnNoBytesAtEndOfChunk(t *testing.T) {
 	}
 }
 
-func TestReadWritePassthrough(t *testing.T){
-	b2 := []byte("2😗↗️₯℃×≸∛23rahhh soooooo😍")
+func TestReadWritePassthrough(t *testing.T) {
+	b1 := []byte("123")
+	b2 := []byte("2😗↗️₯℃×≸∛23raddddhhh soooooo😍")
 
 	dbuf := DelimitedBuffer{}
 
 	zw := gzip.NewWriter(&dbuf)
 
+	zw.Write(b1)
+	zw.Flush()
 	zw.Write(b2)
+	zw.Flush()
 
 	if err := zw.Close(); err != nil {
 		panic(err)
 	}
 
-	zr, _:= gzip.NewReader(&dbuf)
+	gzr, _ := gzip.NewReader(&dbuf)
 
-	outbuf := bytes.NewBuffer([]byte{})
+	var output [][]byte
+	var message []byte
+	for {
+		readBytes := make([]byte, 4)
+		n, err := gzr.Read(readBytes)
+		message = append(message, readBytes[:n]...)
+		if n < len(readBytes) {
+			output = append(output, message)
+			message = []byte{}
+		}
 
-	if _, err := io.Copy(outbuf, zr); err != nil {
-		panic(err)
+		if err == io.EOF || n == 0 {
+			break
+		}
+	}
+	if !bytes.Equal(b1, output[0]) {
+		t.Error("byte slices did not match for b1")
 	}
 
-	if err := zr.Close(); err != nil {
-		panic(err)
-	}
-
-	if  !bytes.Equal(outbuf.Bytes(), b2) {
-		t.Error("output bytes did not match expected output")
+	if !bytes.Equal(b2, output[1]) {
+		t.Error("byte slices did not match for b2")
 	}
 }

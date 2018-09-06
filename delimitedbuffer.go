@@ -1,10 +1,11 @@
-package main
+package delimitedbuffer
 
 import (
 	"encoding/binary"
 	"math"
 	"github.com/pkg/errors"
 	"bytes"
+	"io"
 )
 
 //DelimitedBuffer embeds bytes.Buffer and stores arbitrary binary data prefixed by its 4-byte size
@@ -12,6 +13,12 @@ type DelimitedBuffer struct {
 	bytes.Buffer
 	remainingChunkBytes uint32
 	hasBeenRead         bool
+}
+
+var ErrEndOfDatum = errors.New("Reached the end of the datum, but there are more")
+
+func NewDelimitedBuffer(buf []byte) *DelimitedBuffer {
+	return &DelimitedBuffer{Buffer: *bytes.NewBuffer(buf)}
 }
 
 // Write takes a byte slice and writes it to the DelimitedBuffer
@@ -52,19 +59,23 @@ func (f *DelimitedBuffer) getNextChunkSize() (uint32, error) {
 		return 0, errors.New("cannot get next chunk size since previous chunk has not been completely read")
 	}
 	b := make([]byte, 4)
-	if _, err := f.Buffer.Read(b); err != nil {
+	n, err := f.Buffer.Read(b)
+	if err != nil {
 		return 0, err
+	}
+	if n < len(b) {
+		return 0, io.ErrUnexpectedEOF
 	}
 	return binary.LittleEndian.Uint32(b), nil
 }
 
 func (f *DelimitedBuffer) ReadByte() (byte, error) {
 	if f.remainingChunkBytes == 0 {
-		chunkSize, err := f.getNextChunkSize()
+		nextChunkSize, err := f.getNextChunkSize()
 		if err != nil {
 			return 0, err
 		}
-		f.remainingChunkBytes = chunkSize
+		f.remainingChunkBytes = nextChunkSize
 	}
 	b, err := f.Buffer.ReadByte()
 	if err != nil {
@@ -77,13 +88,12 @@ func (f *DelimitedBuffer) ReadByte() (byte, error) {
 // Read reads up to the end of the next chunk
 func (f *DelimitedBuffer) Read(b []byte) (int, error) {
 	if f.remainingChunkBytes == 0 {
-		byteSize := make([]byte, 4)
-		n, err := f.Buffer.Read(byteSize)
+		byteSize, err := f.getNextChunkSize()
 		if err != nil {
 			// we have read that last datum, this is EOF
-			return n, err
+			return 0, err
 		}
-		f.remainingChunkBytes = binary.LittleEndian.Uint32(byteSize)
+		f.remainingChunkBytes = byteSize
 		if f.hasBeenRead {
 			// we have read to the end of the datum but there are more
 			return 0, nil
