@@ -1,94 +1,51 @@
 package delimitedbuffer
 
 import (
-	"testing"
 	"bytes"
-	"compress/gzip"
-	"io"
+	"testing"
 )
 
-func TestShouldWriteMultipleDelimitedBinaries(t *testing.T) {
-	b1 := []byte("foo")
-	b2 := []byte("2😗↗️₯℃×≸∛23rahhh soooooo😍")
+func TestProtoBufWriterAndReader(t *testing.T) {
+	buf := new(bytes.Buffer)
+	writer := NewProtoBufWriter(buf)
 
-	dbuf := DelimitedBuffer{}
-
-	dbuf.Write(b1)
-	dbuf.Write(b2)
-
-	bb1, err := dbuf.ReadNext()
+	// Write some data
+	data := []byte("Hello, World!")
+	_, err := writer.Write(data)
 	if err != nil {
-		t.Error(err)
+		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if !bytes.Equal(b1, bb1) {
-		t.Error("did not match b1")
+	// Read it back
+	reader := NewProtoBufReader(buf)
+	readData, err := reader.Read()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
 
-	bb2, err := dbuf.ReadNext()
-	if !bytes.Equal(b2, bb2) {
-		t.Error("did not match b2")
-	}
-}
-
-func TestShouldReturnNoBytesAtEndOfChunk(t *testing.T) {
-	b1 := []byte("foo")
-	b2 := []byte("2😗↗️₯℃×≸∛23rahhh soooooo😍")
-	dbuf := DelimitedBuffer{}
-	dbuf.Write(b1)
-	dbuf.Write(b2)
-	p := make([]byte, 20)
-
-	n, _ := dbuf.Read(p)
-	if string(p[:n]) != "foo" {
-		t.Error("read data did not match expected")
-	}
-
-	n, _ = dbuf.Read(p)
-	if n != 0 {
-		t.Error("read data should have returned 0 bytes at end of chunk")
+	if !bytes.Equal(data, readData) {
+		t.Fatalf("expected %v, got %v", data, readData)
 	}
 }
 
-func TestReadWritePassthrough(t *testing.T) {
-	b1 := []byte("123")
-	b2 := []byte("2😗↗️₯℃×≸∛23raddddhhh soooooo😍")
+func TestProtoBufReaderWithNoData(t *testing.T) {
+	buf := new(bytes.Buffer)
+	reader := NewProtoBufReader(buf)
 
-	dbuf := DelimitedBuffer{}
-
-	zw := gzip.NewWriter(&dbuf)
-
-	zw.Write(b1)
-	zw.Flush()
-	zw.Write(b2)
-	zw.Flush()
-
-	if err := zw.Close(); err != nil {
-		panic(err)
+	// Try to read from an empty buffer
+	_, err := reader.Read()
+	if err == nil {
+		t.Fatalf("expected error, got nil")
 	}
+}
 
-	gzr, _ := gzip.NewReader(&dbuf)
+func TestProtoBufWriterWithNilData(t *testing.T) {
+	buf := new(bytes.Buffer)
+	writer := NewProtoBufWriter(buf)
 
-	var output [][]byte
-	var message []byte
-	for {
-		readBytes := make([]byte, 4)
-		n, err := gzr.Read(readBytes)
-		message = append(message, readBytes[:n]...)
-		if n < len(readBytes) {
-			output = append(output, message)
-			message = []byte{}
-		}
-
-		if err == io.EOF || n == 0 {
-			break
-		}
-	}
-	if !bytes.Equal(b1, output[0]) {
-		t.Error("byte slices did not match for b1")
-	}
-
-	if !bytes.Equal(b2, output[1]) {
-		t.Error("byte slices did not match for b2")
+	// Try to write nil data
+	_, err := writer.Write(nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
